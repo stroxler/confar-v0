@@ -122,28 +122,3 @@ main = hspec $ do
       pruneEmptyDirs expectedInitial @?= Just expectedInitial
       let result = pruneEmptyDirs hasEmptyDirs
       result @?= (Just $ FsDir "nonempty" [ FsLeaf "nonempty/file.txt" ])
-
-  {-
-  describe "filesInRepository" $ do
-    it "should produce correct, sorted output on a fake repo" $ do
-      result <- shelly $ do
-        absPaths <- filesInRepository repo
-        mapM (relativeTo repo) absPaths
-      result @?= ["inner_directory", "stuff.txt",
-                  "inner_directory/stuff.txt"]
-
-  describe "isParentOf" $ do
-    it "should return False with no common prefix" $ do
-      isParentOf "/some/path" "some/path" `shouldBe` False
-    it "should return False with incomplete common prefix" $ do
-      isParentOf "some/otherpath" "some/path" `shouldBe` False
-    it "should return False when parent is a prefix but not at a '/'" $ do
-      isParentOf "some/path" "some/path_to/file" `shouldBe` False
-    it "should return True for an empty parent" $ do
-      isParentOf "" "something" `shouldBe` True
-    it "should return True on exact match" $ do
-      isParentOf "some/path" "some/path" `shouldBe` True
-    it "should return True with full common prefix" $ do
-      isParentOf "some/path" "some/path/to/thing" `shouldBe` True
-
--}

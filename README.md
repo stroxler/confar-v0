@@ -1,6 +1,6 @@
-# hss
+# intro-to-hs-scripting (originally hss)
 
-The `hss` project is for me, a haskell beginner, to start learning
+The `intro-to-hs-scripting` project is for me, a haskell beginner, to start learning
 some haskell scripting; for the moment I'm mostly focusing on learning
 how to use the `Shelly` library.
 
@@ -13,6 +13,28 @@ About 6 months back I worked my way through most of Chris Allen and Julie
 Moronuki's "Haskell from First Principles", but it's been a while so some
 of my difficulties will likely just be silly beginner problems with stack
 and other base haskell tools.
+
+# confar
+
+I originally intended this repo to just be some hacking around, but I wound
+up with a working, if very simplistic, reimplementation of `ghar` that's
+enough for my purposes.
+
+So I called the executable (in `app/Main.hs`) `confar-v0`. If you run
+`stack install`, stack will build the project and put `confar-v0` in
+a suitable bin directory (it will print the location; you can make sure
+that the directory is on your `$PATH`). You can run it with
+```
+confar-v0 -s <source_repo_path> -t <target_directory>
+```
+For example, if I set up a new computer, I can install my config files
+(which as of September 2018 are mostly in a single repo, although I do
+intend to split them once confar works better) by running
+```
+cd ~
+git clone git@github.com:stroxler/config
+confar-v0 -s ~/config -t ~
+```
 
 # Issues resolved
 
@@ -81,3 +103,18 @@ This may be easier to use than overloading in some cases.
 You can convert from the system FilePath (which is really just a String) using
 `fromText . pack`, where `pack` converts `String` to `Text`.
 
+## Spacemacs errors when loading buffer into repl
+
+I was getting
+```
+Unexpected response from haskell process
+```
+errors when trying to send the current buffer to the repl in
+spacemacs haskell layer, and I found an
+[issue in haskell-mode](https://github.com/haskell/haskell-mode/issues/1553)
+that seemed to be related; it looks like the community is working
+out changes in ghc that caused some problems for the emacs plugin.
+
+As a temporary fix, it seems that I can get around the problem
+by running some combination of `:set -fshow-loaded-modules` and
+`:set -fobject-code` in the repl before trying to load a module.

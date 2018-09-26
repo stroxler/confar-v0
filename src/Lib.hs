@@ -7,10 +7,6 @@ module Lib where
 import Prelude hiding (
   FilePath,
   )
-import Data.List (
-  sort,
-  partition,
-  )
 import Data.Maybe (
   isJust,
   fromJust,
@@ -19,9 +15,9 @@ import Data.Text (
   Text,
   pack,
   unpack,
-  commonPrefixes,
   dropWhileEnd,
   )
+import qualified Data.Set as Set
 import System.Directory (
   getHomeDirectory,
   )
@@ -39,22 +35,43 @@ import Filesystem.Path.CurrentOS (
   splitDirectories,
   (</>),
   )
-import qualified Data.Map.Lazy as Map
 import qualified Filesystem.Path.CurrentOS as FP
 import qualified Shelly as S
 
 
 {-
-  TODO
-  - Unit test all the functions I have at this time
-  - Learn about a json library (probably Aeson) so that I can
-    serialize directory trees
-  - Write the code to walk a directory tree in two ways:
-    - constructively (this is the only one that's really needed)
-    - destructively, cleaning up any dead symlinks based on
-      a previous run
-    - maybe add a third run to clean up empty directories, after
-      symlinks are gone
+  TODO: in a major refactor
+  - Rework my library interactions
+    - Make an FPath typeclass that can be converted to
+      Prelude.FilePath, String, Text, and FP.FilePath.
+      Make instances for all of them
+    - Get rid of the unix library
+  - Rework the current FsTree class
+    - Rename the current FsTree type to FsNode, and make it
+      polymorphic
+    - Make a new FsTree class to contain the top-level info
+    - When creating an FsTree, maybe take an FsNode and map it
+      to use a record for the path that should have all three
+      path formats: absolute, relative to root, relative to parent.
+      Alternatively, have an enum on FsTree so that it's easy
+      to toggle between these or something.
+  - Extend the functionality
+    - Learn to serialize to yaml or json with Aeson
+    - Learn to make subcommands using Options.Applicative
+    - Figure out a data structure - with serialization - to
+      record the state of a confar setup.
+      - Extend the install to remove dead links if they are
+        removed from a repo
+      - Write a command that will clear the state so you can do
+        a fresh install
+    - Create a config file that lets you specify, in a directory
+      root, locations of repos to use. Make a new command that
+      will handle multiple repos and serialize all of the results.
+      Try to design it so that it can handle files moving between
+      confar repos.
+    - Extend the aforementioned config so that we can also git
+      clone all the repos; that way we can specify git urls
+      in the target directory rather than file locations.
  -}
 
 shI :: Show a => Sh a -> IO a
@@ -145,6 +162,16 @@ relativeTo child parent = case (relativePath parent child) of
 
 -- Definition and creating FsTree data
 
+
+reservedGitNames :: Set.Set FilePath
+reservedGitNames = Set.fromList
+  [".git"
+  , ".gitignore"
+  , ".gitattributes"
+  , ".mailmap"
+  ]
+
+
 data FsTree = FsLeaf FilePath
             | FsDir FilePath [FsTree]
   deriving (Show, Eq)
@@ -155,7 +182,7 @@ repoFsTree path =
     path_ <- expandTilde path
     isDir <- S.test_d path_
     if isDir then do
-      let notGit = not . (== (path_ </> ".git"))
+      let notGit p = not $ Set.member (FP.basename p) reservedGitNames
       contents <-  (filter notGit) <$> S.ls path_
       FsDir path_ <$> mapM repoFsTree contents
     else
@@ -215,4 +242,47 @@ prettyTextTree tree = go "" tree where
   go prefix (FsDir path subdirs) =
     (showPath prefix path) <>
     (mconcat $ map (go $ prefix <> "| ") subdirs)
+
+
+-- doing confar stuff  (CONF As Repositories)
+
+confarInstall :: FilePath -> FilePath -> Sh ()
+confarInstall repoDir targetDir = do
+  repoTree <- pruneEmptyDirs <$> repoFsTree repoDir
+  case repoTree of
+    Nothing -> error $ "Cannot confarWalk an empty directory at " <> (show repoDir)
+    Just leaf@(FsLeaf _) -> error $ "Cannot confarWalk just a file " <> (show leaf)
+    Just tree@(FsDir root _) ->
+      walkFsTree handleDir handleFile tree
+      where
+        relativeToTarget path = targetDir </> (path `relativeTo` root)
+        handleDir path = (S.mkdir_p . relativeToTarget) path
+        handleFile path =
+          let
+            src = unpack $ toTextIgnore path
+            dst = unpack $ toTextIgnore $ relativeToTarget path
+          in liftIO $ do
+            exists <- SD.doesPathExist dst
+            if exists
+            then do
+              okay <- do
+                 isLink <- SD.pathIsSymbolicLink dst
+                 if isLink
+                 then (== src) <$> SD.getSymbolicLinkTarget dst
+                 else return False
+              if okay
+              then putStrLn $ "Skipping existing symlink " <> dst <> " -> " <> src
+              else error $ "Cannot create symlink at " <> dst
+            else do
+              putStrLn $ "Symlinking " <> src <> " to " <> dst
+              SD.createFileLink src dst
+
+
+walkFsTree :: (FilePath -> Sh ()) -> (FilePath -> Sh ()) -> FsTree -> Sh ()
+walkFsTree onDir onLeaf tree = case tree of
+  FsLeaf path -> do
+    onLeaf path
+  FsDir path children -> do
+    onDir path
+    mapM_ (walkFsTree onDir onLeaf) children
 
