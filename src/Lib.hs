@@ -162,13 +162,19 @@ relativeTo child parent = case (relativePath parent child) of
 
 -- Definition and creating FsTree data
 
-
-reservedGitNames :: Set.Set FilePath
-reservedGitNames = Set.fromList
-  [".git"
+ignorePathNames :: Set.Set FilePath
+ignorePathNames = Set.fromList
+  [ "nohup.out"
+  -- git-related files
+  , ".git"
   , ".gitignore"
   , ".gitattributes"
   , ".mailmap"
+  -- osx-related stuff
+  , ".DS_store"
+  -- dotfiles from various other tools
+  , ".z"
+  , ".python-version"
   ]
 
 
@@ -182,11 +188,11 @@ repoFsTree path =
     path_ <- expandTilde path
     isDir <- S.test_d path_
     if isDir then do
-      let notGit p = not $ Set.member (FP.basename p) reservedGitNames
-      contents <-  (filter notGit) <$> S.ls path_
+      contents <-  (filter (not . ignore)) <$> S.ls path_
       FsDir path_ <$> mapM repoFsTree contents
     else
       return $ FsLeaf path_
+  where ignore p = Set.member (FP.filename p) ignorePathNames
 
 -- Manipulating FsTree data
 
