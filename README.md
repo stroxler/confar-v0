@@ -43,7 +43,7 @@ If you run `stack install`, stack will build the project and put `confar-v0` in
 a suitable bin directory (it will print the location; you can make sure
 that the directory is on your `$PATH`). You can run it with
 ```
-confar-v0 -s <source_repo_path> -t <target_directory>
+confar-v0 -s <source_repo_path> -d <dest_directory>
 ```
 For example, if I set up a new computer, I can install my config files
 (which as of September 2018 are mostly in a single repo, although I do
