@@ -28,12 +28,8 @@ import Shelly (
   verbosely,
   toTextIgnore,
   liftIO,
-  )
-import Filesystem.Path.CurrentOS (
   FilePath,
   fromText,
-  splitDirectories,
-  (</>),
   )
 import qualified Filesystem.Path.CurrentOS as FP
 import qualified Shelly as S
@@ -80,6 +76,21 @@ shI action = shelly $ verbosely $ do
   liftIO $ print out
   return out
 
+s2fp :: FilePath -> FP.FilePath
+s2fp = FP.fromText . toTextIgnore
+
+fp2s path = case FP.toText path of
+  Right okay -> fromText okay
+  Left oops -> error "Failed to confer FP filepath to Shelly"
+
+(</>) :: FilePath -> FilePath -> FilePath
+(</>) a b = fp2s $ (FP.</>) (s2fp a) (s2fp b)
+
+splitDirectories :: FilePath -> [FilePath]
+splitDirectories path = map fp2s $ FP.splitDirectories $ s2fp path
+
+concatPaths :: [FilePath] -> FilePath
+concatPaths paths = fp2s $ FP.concat $ map s2fp paths
 
 -- Equivalent of python's os.path.expanduser
 
@@ -92,7 +103,7 @@ expandTilde_ path = case splitDirectories path of
   ["~/"] -> toFilePath <$> getHomeDirectory
   "~/" : rest -> do
     home <- toFilePath <$> getHomeDirectory
-    return $ FP.concat $ home : rest
+    return $ concatPaths $ home : rest
   _ -> return path
   where
     toFilePath = fromText . pack
@@ -116,13 +127,13 @@ data PathRelation = PrEquiv FilePath
 findPathRelation :: FilePath -> FilePath -> PathRelation
 findPathRelation a b =
   let
-    splitA = FP.splitDirectories a
-    splitB = FP.splitDirectories b
+    splitA = splitDirectories a
+    splitB = splitDirectories b
     go :: [FilePath] -> [FilePath] -> [FilePath] -> PathRelation
     go aa bb commonRoot =
       let
-        rootPath = stripLastSlash $ FP.concat commonRoot
-        relPath pathList = stripLastSlash $ FP.concat pathList
+        rootPath = stripLastSlash $ concatPaths commonRoot
+        relPath pathList = stripLastSlash $ concatPaths pathList
         absPath pathList = stripLastSlash $ rootPath </> (relPath pathList)
       in case (aa, bb) of
         ([], [])       -> PrEquiv rootPath
@@ -192,7 +203,7 @@ repoFsTree path =
       FsDir path_ <$> mapM repoFsTree contents
     else
       return $ FsLeaf path_
-  where ignore p = Set.member (FP.filename p) ignorePathNames
+  where ignore p = Set.member (fp2s $ FP.filename $ s2fp p) ignorePathNames
 
 -- Manipulating FsTree data
 
